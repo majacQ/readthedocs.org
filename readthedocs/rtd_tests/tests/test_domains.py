@@ -1,61 +1,11 @@
 import json
 
-from django.core.cache import cache
-from django.test import TestCase
-from django.test.client import RequestFactory
-from django.test.utils import override_settings
-
+from django.conf import settings
+from django.test import TestCase, override_settings
 from django_dynamic_fixture import get
 
-from readthedocs.core.middleware import SubdomainMiddleware
-from readthedocs.projects.models import Project, Domain
-
-
-class MiddlewareTests(TestCase):
-
-    def setUp(self):
-        self.factory = RequestFactory()
-        self.middleware = SubdomainMiddleware()
-        self.url = '/'
-        self.old_cache_get = cache.get
-
-    def tearDown(self):
-        cache.get = self.old_cache_get
-
-    @override_settings(PRODUCTION_DOMAIN='readthedocs.org')
-    def test_cname_creation(self):
-        self.assertEqual(Domain.objects.count(), 0)
-        self.project = get(Project, slug='my_slug')
-        cache.get = lambda x: 'my_slug'
-        request = self.factory.get(self.url, HTTP_HOST='my.valid.hostname')
-        self.middleware.process_request(request)
-        self.assertEqual(Domain.objects.count(), 1)
-        self.assertEqual(Domain.objects.first().url, 'my.valid.hostname')
-
-    @override_settings(PRODUCTION_DOMAIN='readthedocs.org')
-    def test_no_readthedocs_domain(self):
-        self.assertEqual(Domain.objects.count(), 0)
-        self.project = get(Project, slug='pip')
-        cache.get = lambda x: 'my_slug'
-        request = self.factory.get(self.url, HTTP_HOST='pip.readthedocs.org')
-        self.middleware.process_request(request)
-        self.assertEqual(Domain.objects.count(), 0)
-
-    @override_settings(PRODUCTION_DOMAIN='readthedocs.org')
-    def test_cname_count(self):
-        self.assertEqual(Domain.objects.count(), 0)
-        self.project = get(Project, slug='my_slug')
-        cache.get = lambda x: 'my_slug'
-        request = self.factory.get(self.url, HTTP_HOST='my.valid.hostname')
-
-        self.middleware.process_request(request)
-        self.assertEqual(Domain.objects.count(), 1)
-        self.assertEqual(Domain.objects.first().url, 'my.valid.hostname')
-        self.assertEqual(Domain.objects.first().count, 1)
-
-        self.middleware.process_request(request)
-        self.assertEqual(Domain.objects.count(), 1)
-        self.assertEqual(Domain.objects.first().count, 2)
+from readthedocs.projects.forms import DomainForm
+from readthedocs.projects.models import Domain, Project
 
 
 class ModelTests(TestCase):
@@ -64,63 +14,174 @@ class ModelTests(TestCase):
         self.project = get(Project, slug='kong')
 
     def test_save_parsing(self):
-        domain = get(Domain, url='http://google.com')
-        self.assertEqual(domain.clean_host, 'google.com')
+        domain = get(Domain, domain='google.com')
+        self.assertEqual(domain.domain, 'google.com')
 
-        domain.url = 'google.com'
-        self.assertEqual(domain.clean_host, 'google.com')
+        domain.domain = 'google.com'
+        self.assertEqual(domain.domain, 'google.com')
 
-        domain.url = 'https://google.com'
+        domain.domain = 'https://google.com'
         domain.save()
-        self.assertEqual(domain.clean_host, 'google.com')
+        self.assertEqual(domain.domain, 'google.com')
 
-        domain.url = 'www.google.com'
+        domain.domain = 'www.google.com'
         domain.save()
-        self.assertEqual(domain.clean_host, 'www.google.com')
+        self.assertEqual(domain.domain, 'www.google.com')
 
 
-class TestCanonical(TestCase):
+class FormTests(TestCase):
 
     def setUp(self):
-        self.project = get(Project)
-        self.domain = self.project.domains.create(canonical=True)
+        self.project = get(Project, slug='kong')
 
-    def test_canonical_clean(self):
-        # Only a url
-        self.domain.url = "djangokong.com"
-        self.domain.save()
-        self.assertEqual(self.project.clean_canonical_url, "http://djangokong.com/")
-        # Extra bits in the URL
-        self.domain.url = "http://djangokong.com/en/latest/"
-        self.domain.save()
-        self.assertEqual(self.project.clean_canonical_url, "http://djangokong.com/")
+    def test_https(self):
+        """Make sure https is an admin-only attribute."""
+        form = DomainForm(
+            {'domain': 'example.com', 'canonical': True},
+            project=self.project,
+        )
+        self.assertTrue(form.is_valid())
+        domain = form.save()
+        self.assertFalse(domain.https)
+        form = DomainForm(
+            {
+                'domain': 'example.com', 'canonical': True,
+                'https': True,
+            },
+            project=self.project,
+        )
+        self.assertFalse(form.is_valid())
 
-        self.domain.url = "http://djangokong.com//"
-        self.domain.save()
-        self.assertEqual(self.project.clean_canonical_url, "http://djangokong.com/")
-        # Subdomain
-        self.domain.url = "foo.djangokong.com"
-        self.domain.save()
-        self.assertEqual(self.project.clean_canonical_url, "http://foo.djangokong.com/")
-        # Https
-        self.domain.url = "https://djangokong.com//"
-        self.domain.save()
-        self.assertEqual(self.project.clean_canonical_url, "https://djangokong.com/")
+    def test_production_domain_not_allowed(self):
+        """Make sure user can not enter production domain name."""
+        form = DomainForm(
+            {'domain': settings.PRODUCTION_DOMAIN},
+            project=self.project,
+        )
+        self.assertFalse(form.is_valid())
+        self.assertEqual(
+            form.errors['domain'][0],
+            f'{settings.PRODUCTION_DOMAIN} is not a valid domain.'
+        )
 
-        self.domain.url = "https://foo.djangokong.com//"
-        self.domain.save()
-        self.assertEqual(self.project.clean_canonical_url, "https://foo.djangokong.com/")
+        form2 = DomainForm(
+            {'domain': 'test.' + settings.PRODUCTION_DOMAIN},
+            project=self.project,
+        )
+        self.assertFalse(form2.is_valid())
+        self.assertEqual(
+            form2.errors['domain'][0],
+            f'{settings.PRODUCTION_DOMAIN} is not a valid domain.'
+        )
+
+    @override_settings(PUBLIC_DOMAIN='readthedocs.io')
+    def test_public_domain_not_allowed(self):
+        """Make sure user can not enter public domain name."""
+        form = DomainForm(
+            {'domain': settings.PUBLIC_DOMAIN},
+            project=self.project,
+        )
+        self.assertFalse(form.is_valid())
+        self.assertEqual(
+            form.errors['domain'][0],
+            f'{settings.PUBLIC_DOMAIN} is not a valid domain.'
+        )
+
+        form2 = DomainForm(
+            {'domain': 'docs.' + settings.PUBLIC_DOMAIN},
+            project=self.project,
+        )
+        self.assertFalse(form2.is_valid())
+        self.assertEqual(
+            form2.errors['domain'][0],
+            f'{settings.PUBLIC_DOMAIN} is not a valid domain.'
+        )
+
+    def test_domain_with_path(self):
+        form = DomainForm(
+            {'domain': 'domain.com/foo/bar'},
+            project=self.project,
+        )
+        self.assertTrue(form.is_valid())
+        domain = form.save()
+        self.assertEqual(domain.domain, 'domain.com')
+
+    def test_valid_domains(self):
+        domains = [
+            'python.org',
+            'a.io',
+            'a.e.i.o.org',
+            'my.domain.com.edu',
+            'my-domain.fav',
+        ]
+        for domain in domains:
+            form = DomainForm(
+                {'domain': domain},
+                project=self.project,
+            )
+            self.assertTrue(form.is_valid(), domain)
+
+    def test_invalid_domains(self):
+        domains = [
+            'python..org',
+            '****.foo.com',
+            'domain',
+            'domain.com.',
+            'My domain.org',
+            'i.o',
+            '[special].com',
+            'some_thing.org',
+            'invalid-.com',
+        ]
+        for domain in domains:
+            form = DomainForm(
+                {'domain': domain},
+                project=self.project,
+            )
+            self.assertFalse(form.is_valid(), domain)
+
+    def test_canonical_change(self):
+        """Make sure canonical can be properly changed."""
+        form = DomainForm(
+            {'domain': 'example.com', 'canonical': True},
+            project=self.project,
+        )
+        self.assertTrue(form.is_valid())
+        domain = form.save()
+        self.assertEqual(domain.domain, 'example.com')
+
+        self.assertTrue(form.is_valid())
+        domain = form.save()
+        self.assertEqual(domain.domain, 'example.com')
+
+        form = DomainForm(
+            {'domain': 'example2.com', 'canonical': True},
+            project=self.project,
+        )
+        self.assertFalse(form.is_valid())
+        self.assertEqual(form.errors['canonical'][0], 'Only one domain can be canonical at a time.')
+
+        form = DomainForm(
+            {'canonical': False},
+            project=self.project,
+            instance=domain,
+        )
+        self.assertTrue(form.is_valid())
+        domain = form.save()
+        self.assertEqual(domain.domain, 'example.com')
+        self.assertFalse(domain.canonical)
 
 
 class TestAPI(TestCase):
 
     def setUp(self):
         self.project = get(Project)
-        self.domain = self.project.domains.create(url='djangokong.com')
+        self.domain = self.project.domains.create(domain='djangokong.com')
 
     def test_basic_api(self):
         resp = self.client.get('/api/v2/domain/')
         self.assertEqual(resp.status_code, 200)
         obj = json.loads(resp.content)
-        self.assertEqual(obj['results'][0]['url'], 'djangokong.com')
+        self.assertEqual(obj['results'][0]['domain'], 'djangokong.com')
         self.assertEqual(obj['results'][0]['canonical'], False)
+        self.assertNotIn('https', obj['results'][0])

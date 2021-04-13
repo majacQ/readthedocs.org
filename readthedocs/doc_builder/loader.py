@@ -1,13 +1,12 @@
-from django.utils.importlib import import_module
+"""Lookup tables for builders and backends."""
+from importlib import import_module
+
 from django.conf import settings
 
+
 # Managers
-mkdocs = import_module(
-    getattr(settings, 'MKDOCS_BACKEND',
-            'readthedocs.doc_builder.backends.mkdocs'))
-sphinx = import_module(
-    getattr(settings, 'SPHINX_BACKEND',
-            'readthedocs.doc_builder.backends.sphinx'))
+mkdocs = import_module(settings.MKDOCS_BACKEND)
+sphinx = import_module(settings.SPHINX_BACKEND)
 
 BUILDER_BY_NAME = {
     # Possible HTML Builders
@@ -17,11 +16,9 @@ BUILDER_BY_NAME = {
     # Other Sphinx Builders
     'sphinx_pdf': sphinx.PdfBuilder,
     'sphinx_epub': sphinx.EpubBuilder,
-    'sphinx_search': sphinx.SearchBuilder,
     'sphinx_singlehtmllocalmedia': sphinx.LocalMediaBuilder,
     # Other markup
     'mkdocs': mkdocs.MkdocsHTML,
-    'mkdocs_json': mkdocs.MkdocsJSON,
 }
 
 

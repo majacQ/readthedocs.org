@@ -1,15 +1,21 @@
+# -*- coding: utf-8 -*-
+
+"""Rebuild documentation for all projects."""
+
 from django.core.management.base import BaseCommand
 
 from readthedocs.builds.models import Version
-from readthedocs.projects.tasks import update_docs
+from readthedocs.projects.tasks import update_docs_task
 
 
 class Command(BaseCommand):
-    """Custom management command to rebuild documentation for all projects on
-    the site. Invoked via ``./manage.py update_repos``.
-    """
+
+    help = __doc__
 
     def handle(self, *args, **options):
-        for version in Version.objects.filter(active=True, built=False):
-            update_docs.run(version.project_id, record=False,
-                            version_pk=version.pk)
+        for version in Version.internal.filter(active=True, built=False):
+            # pylint: disable=no-value-for-parameter
+            update_docs_task(
+                version.pk,
+                record=False,
+            )

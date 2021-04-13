@@ -1,160 +1,252 @@
-=====================
-Development Standards
-=====================
+Development Setup and Standards
+===============================
 
-Front End Development
-=====================
+These are development setup and standards that are adhered to by the core development team while
+developing Read the Docs and related services. If you are a contributor to Read the Docs,
+it might a be a good idea to follow these guidelines as well.
 
-Background
-----------
 
-.. info::
+Core team standards
+-------------------
 
-    Consider this the canonical resource for contributing Javascript and CSS. We
-    are currently in the process of modernizing our front end development
-    procedures. You will see a lot of different styles around the code base for
-    front end JavaScript and CSS.
+Core team members expect to have a development environment that closely
+approximates our production environment, in order to spot bugs and logical
+inconsistencies before they make their way to production.
 
-Our modern front end development stack includes the following tools:
+This solution gives us many features that allows us to have an
+environment closer to production:
 
-* `Gulp`_
-* `Bower`_
-* `Browserify`_
-* `Debowerify`_
-* And soon, `LESS`_
+Celery runs as a separate process
+    Avoids masking bugs that could be introduced by Celery tasks in a race conditions.
 
-We use the following libraries:
+Celery runs multiple processes
+    We run celery with multiple worker processes to discover race conditions
+    between tasks.
 
-* `Knockout`_
-* `jQuery`_
-* Several jQuery plugins
+Docker for builds
+    Docker is used for a build backend instead of the local host build backend.
+    There are a number of differences between the two execution methods in how
+    processes are executed, what is installed, and what can potentially leak
+    through and mask bugs -- for example, local SSH agent allowing code check
+    not normally possible.
 
-Previously, JavaScript development has been done in monolithic files or inside
-templates. jQuery was added as a global object via an include in the base
-template to an external source. There are no standards currently to JavaScript
-libraries, this aims to solve that.
+Serve documentation under a subdomain
+    There are a number of resolution bugs and cross-domain behavior that can
+    only be caught by using `USE_SUBDOMAIN` setting.
 
-The requirements for modernizing our front end code are:
+PostgreSQL as a database
+    It is recommended that Postgres be used as the default database whenever
+    possible, as SQLite has issues with our Django version and we use Postgres
+    in production.  Differences between Postgres and SQLite should be masked for
+    the most part however, as Django does abstract database procedures, and we
+    don't do any Postgres-specific operations yet.
 
-* Code should be modular and testable. One-off chunks of JavaScript in templates
-  or in large monolithic files are not easily testable. We currently have no
-  JavaScript tests.
-* Reduce code duplication.
-* Easy JavaScript dependency management.
+Celery is isolated from database
+    Celery workers on our build servers do not have database access and need
+    to be written to use API access instead.
 
-Modularizing code with `Browserify`_ is a good first step. In this development
-workflow, major dependencies commonly used across JavaScript includes are
-installed with `Bower`_ for testing, and vendorized as standalone libraries via
-`Gulp`_ and `Browserify`_. This way, we can easily test our JavaScript libraries
-against jQuery/etc, and have the flexibility of modularizing our code. See
-`JavaScript Bundles`_ for more information on what and how we are bundling.
+Use NGINX as web server
+    All the site is served via NGINX with the ability to change some configuration locally.
 
-To ease deployment and contributions, bundled JavaScript is checked into the
-repository for now. This ensures new contributors don't need an additional front
-end stack just for making changes to our Python code base. In the future, this
-may change, so that assets are compiled before deployment, however as our front
-end assets are in a state of flux, it's easier to keep absolute sources checked
-in.
+MinIO as Django storage backend
+    All static and media files are served using Minio --an emulator of S3,
+    which is the one used in production.
 
-Getting Started
----------------
+Serve documentation via El Proxito
+    Documentation is proxied by NGINX to El Proxito and proxied back to NGINX to be served finally.
+    El Proxito is a small application put in front of the documentation to serve files
+    from the Django Storage Backend.
 
-You will need a working version of Node and NPM to get started. We won't cover
-that here, as it varies from platform to platform.
+Search enabled by default
+    Elasticsearch is properly configured and enabled by default.
+    All the documentation indexes are updated after a build is finished.
 
-To install these tools and dependencies::
 
-    npm install
+Set up your environment
+-----------------------
 
-This will install locally to the project, not globally. You can install globally
-if you wish, otherwise make sure ``node_modules/.bin`` is in your PATH.
+After cloning ``readthedocs.org`` repository, you need to
 
-Next, install front end dependencies::
 
-    bower install
+#. install `Docker <https://www.docker.com/>`_ following `their installation guide <https://docs.docker.com/install/>`_.
 
-The sources for our bundles are found in the per-application path
-``static-src``, which has the same directory structure as ``static``. Files in
-``static-src`` are compiled to ``static`` for static file collection in Django.
-Don't edit files in ``static`` directly, unless you are sure there isn't a
-source file that will compile over your changes.
+#. clone the ``readthedocs.org`` repository:
 
-To test changes while developing, which will watch source files for changes and
-compile as necessary, you can run `Gulp`_ with our development target::
+   .. prompt:: bash
 
-    gulp dev
+      git clone --recurse-submodules https://github.com/readthedocs/readthedocs.org/
 
-Once you are satisfied with your changes, finalize the bundles (this will
-minify library sources)::
+#. install the requirements from ``common`` submodule:
 
-    gulp build
+   .. prompt:: bash
 
-If you updated any of our vendor libraries, compile those::
+      pip install -r common/dockerfiles/requirements.txt
 
-    gulp vendor
+#. build the Docker image for the servers:
 
-Make sure to check in both files under ``static`` and ``static-src``.
+   .. warning::
 
-Making Changes
---------------
+      This command could take a while to finish since it will download several Docker images.
 
-If you are creating a new library, or a new library entry point, make sure to
-define the application source file in ``gulpfile.js``, this is not handled
-automatically right now.
+   .. prompt:: bash
 
-If you are bringing in a new vendor library, make sure to define the bundles you
-are going to create in ``gulpfile.js`` as well.
+      inv docker.build
 
-Tests should be included per-application, in a path called ``tests``, under the
-``static-src/js`` path you are working in. Currently, we still need a test
-runner that accumulates these files.
+   .. tip::
 
-Deployment
-----------
+      If you pass ``GITHUB_TOKEN`` environment variable to this command,
+      it will add support for readthedocs-ext.
 
-If merging several branches with JavaScript changes, it's important to do a
-final post-merge bundle. Follow the steps above to rebundle the libraries, and
-check in any changed libraries.
+#. pull down Docker images for the builders:
 
-JavaScript Bundles
-------------------
+   .. prompt:: bash
 
-There are several components to our bundling scheme:
+      inv docker.pull --only-latest
 
-    Vendor library
-        We repackage these using `Browserify`_, `Bower`_, and `Debowerify`_ to
-        make these libraries available by a ``require`` statement.  Vendor
-        libraries are packaged separately from our JavaScript libraries, because
-        we use the vendor libraries in multiple locations. Libraries bundled
-        this way with `Browserify`_ are available to our libraries via
-        ``require`` and will back down to finding the object on the global
-        ``window`` scope.
+#. start all the containers:
 
-        Vendor libraries should only include libraries we are commonly reusing.
-        This currently includes `jQuery` and `Knockout`. These modules will be
-        excluded from libraries by special includes in our ``gulpfile.js``.
+   .. prompt:: bash
 
-    Minor third party libraries
-        These libraries are maybe used in one or two locations. They are
-        installed via `Bower`_ and included in the output library file. Because
-        we aren't reusing them commonly, they don't require a separate bundle or
-        separate include. Examples here would include jQuery plugins used on one
-        off forms, such as jQuery Payments.
+      inv docker.up  --init  # --init is only needed the first time
 
-    Our libraries
-        These libraries are bundled up excluding vendor libraries ignored by
-        rules in our ``gulpfile.js``. These files should be organized by
-        function and can be split up into multiple files per application.
+#. go to http://localhost:9000/ (MinIO S3 storage backend), click "..." and then "Edit Policy" and give "Read Only" access on all the buckets (``static`` and ``media``).
 
-        Entry points to libraries must be defined in ``gulpfile.js`` for now. We
-        don't have a defined directory structure that would make it easy to
-        imply the entry point to an application library.
+#. go to http://community.dev.readthedocs.io to access your local instance of Read the Docs.
 
-.. _`Bower`: http://bower.io
-.. _`Gulp`: http://gulpjs.com
-.. _`Browserify`: http://browserify.org
-.. _`Debowerify`: https://github.com/eugeneware/debowerify
-.. _`LESS`: http://lesscss.org
 
-.. _`jQuery`: http://jquery.com
-.. _`Knockout`: http://knockoutjs.com
+Working with Docker Compose
+---------------------------
+
+We wrote a wrapper with ``invoke`` around ``docker-compose`` to have some shortcuts and
+save some work while typing docker compose commands. This section explains these ``invoke`` commands:
+
+``inv docker.build``
+    Builds the generic Docker image used by our servers (web, celery, build and proxito).
+
+``inv docker.up``
+    Starts all the containers needed to run Read the Docs completely.
+
+    * ``--no-search`` can be passed to disable search
+    * ``--init`` is used the first time this command is ran to run initial migrations, create an admin user, etc
+    * ``--no-reload`` makes all celery processes and django runserver
+      to use no reload and do not watch for files changes
+
+``inv docker.shell``
+    Opens a shell in a container (web by default).
+
+    * ``--running`` the shell is open in a container that it's already running
+    * ``--container`` specifies in which container the shell is open
+
+``inv docker.manage {command}``
+    Executes a Django management command in a container.
+
+    .. tip::
+
+       Useful when modifying models to run ``makemigrations``.
+
+``inv docker.down``
+    Stops and removes all containers running.
+
+    * ``--volumes`` will remove the volumes as well (database data will be lost)
+
+``inv docker.restart {containers}``
+    Restarts the containers specified (automatically restarts NGINX when needed).
+
+``inv docker.attach {container}``
+    Grab STDIN/STDOUT control of a running container.
+
+    .. tip::
+
+       Useful to debug with ``pdb``. Once the program has stopped in your pdb line,
+       you can run ``inv docker.attach web`` and jump into a pdb session
+       (it also works with ipdb and pdb++)
+
+    .. tip::
+
+       You can hit CTRL-p CTRL-p to detach it without stopping the running process.
+
+``inv docker.test``
+    Runs all the test suites inside the container.
+
+    * ``--arguments`` will pass arguments to Tox command (e.g. ``--arguments "-e py36 -- -k test_api"``)
+
+``inv docker.pull``
+    Downloads and tags all the Docker images required for builders.
+
+    * ``--only-latest`` does not pull ``stable`` and ``testing`` images.
+
+``inv docker.buildassets``
+    Build all the assets and "deploy" them to the storage.
+
+Adding a new Python dependency
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The Docker image for the servers is built with the requirements defined in the current checked out branch.
+In case you need to add a new Python dependency while developing,
+you can use the ``common/dockerfiles/entrypoints/common.sh`` script as shortcut.
+
+This script is run at startup on all the servers (web, celery, builder, proxito) which
+allows you to test your dependency without re-building the whole image.
+To do this, add the ``pip`` command required for your dependency in ``common.sh`` file:
+
+.. code-block:: bash
+
+   # common.sh
+   pip install my-dependency==1.2.3
+
+Once the PR that adds this dependency was merged, you can rebuild the image
+so the dependency is added to the Docker image itself and it's not needed to be installed
+each time the container spins up.
+
+
+Debugging Celery
+~~~~~~~~~~~~~~~~
+
+In order to step into the worker process, you can't use ``pdb`` or ``ipdb``, but
+you can use ``celery.contrib.rdb``:
+
+.. code-block:: python
+
+    from celery.contrib import rdb; rdb.set_trace()
+
+When the breakpoint is hit, the Celery worker will pause on the breakpoint and
+will alert you on STDOUT of a port to connect to. You can open a shell into the container
+with ``inv docker.shell celery`` (or ``build``) and then use ``telnet`` or ``netcat``
+to connect to the debug process port:
+
+.. prompt:: bash
+
+    nc 127.0.0.1 6900
+
+The ``rdb`` debugger is similar to ``pdb``, there is no ``ipdb`` for remote
+debugging currently.
+
+
+Configuring connected accounts
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+These are optional steps to setup the :doc:`connected accounts </connected-accounts>`
+(GitHub, GitLab, and BitBucket) in your development environment.
+This will allow you to login to your local development instance
+using your GitHub, Bitbucket, or GitLab credentials
+and this makes the process of importing repositories easier.
+
+However, because these services will not be able to connect back to your local development instance,
+:doc:`webhooks </webhooks>` will not function correctly.
+For some services, the webhooks will fail to be added when the repository is imported.
+For others, the webhook will simply fail to connect when there are new commits to the repository.
+
+.. figure:: ../_static/images/development/bitbucket-oauth-setup.png
+    :align: center
+    :figwidth: 80%
+    :target: ../_static/images/development/bitbucket-oauth-setup.png
+
+    Configuring an OAuth consumer for local development on Bitbucket
+
+* Configure the applications on GitHub, Bitbucket, and GitLab.
+  For each of these, the callback URI is ``http://community.dev.readthedocs.io/accounts/<provider>/login/callback/``
+  where ``<provider>`` is one of ``github``, ``gitlab``, or ``bitbucket_oauth2``.
+  When setup, you will be given a "Client ID" (also called an "Application ID" or just "Key") and a "Secret".
+* Take the "Client ID" and "Secret" for each service and enter it in your local Django admin at:
+  ``http://community.dev.readthedocs.io/admin/socialaccount/socialapp/``.
+  Make sure to apply it to the "Site".

@@ -1,37 +1,53 @@
-Support
-=======
+Site Support
+============
 
-Getting Help
+Usage Questions
+---------------
+
+If you have questions about how to use Read the Docs, or have an issue that
+isn't related to a bug, `Stack Overflow`_ is the best place to ask.  Tag
+questions with ``read-the-docs`` so other folks can find them easily.
+
+Good questions for Stack Overflow would be:
+
+* "What is the best way to structure the table of contents across a project?"
+* "How do I structure translations inside of my project for easiest contribution from users?"
+* "How do I use Sphinx to use SVG images in HTML output but PNG in PDF output?"
+
+You might also find the answers you are looking for in our :doc:`documentation guides </guides/index>`.
+These provide step-by-step solutions to common user requirements.
+
+User Support
 ------------
 
-The easiest way to get help with the project is to join the ``#readthedocs``
-channel on Freenode_. We hang out there and you can get real-time help with
-your projects.  The other good way is to open an issue on GitHub_.
+If you need a specific request for your project or account,
+like more resources, change of the project's slug or username.
 
-.. _Freenode: irc://freenode.net/
-.. _GitHub: http://github.com/rtfd/readthedocs.org/issues
+.. tabs::
 
-Backwards Incompatible Changes
-------------------------------
+   .. tab:: |org_brand|
 
-We are thinking about having some kind of Backwards
-Incompatible Changes policy, much like the 1.0 of a code base, once we define
-the redirects and interfaces that we wish to expose permanently.
+        Please fill out the form at https://readthedocs.org/support/,
+        and we will reply as soon as possible.
 
-Commercial Support
-------------------
+   .. tab:: |com_brand|
 
-We offer commercial support for Read the Docs,
-commercial hosting,
-as well as consulting around all documentation systems.
-You can contact us at hello@readthedocs.com to learn more,
-or visit us at https://readthedocs.com.
+        Please fill out the form at https://readthedocs.com/support/,
+        and we will reply within 1 business day for most plans.
 
-Named Support Contact
-~~~~~~~~~~~~~~~~~~~~~
+Bug Reports
+-----------
 
-This level of support gives you priority access to our time.
-Your support requests will be processed in our Priority Support Queue,
-and you will have access to a dedicated support person at Read the Docs.
+If you have an issue with the actual functioning of the site,
+you can file bug reports on our `GitHub issue tracker`_.
+You can also :doc:`contribute </contribute>` to Read the Docs,
+as the code is open source.
 
+Priority Support
+----------------
 
+We offer priority support with :doc:`Read the Docs for Business </commercial/index>`
+and we have a dedicated team that responds to support requests during business hours.
+
+.. _Stack Overflow: https://stackoverflow.com/questions/tagged/read-the-docs
+.. _Github issue tracker: https://github.com/readthedocs/readthedocs.org/issues

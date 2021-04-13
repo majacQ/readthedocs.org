@@ -1,68 +1,130 @@
+from corsheaders.middleware import CorsMiddleware
+from django.conf import settings
+from django.contrib.auth.middleware import AuthenticationMiddleware
+from django.contrib.sessions.middleware import SessionMiddleware
 from django.http import Http404
-from django.core.cache import cache
+from django.http import HttpResponse
 from django.test import TestCase
 from django.test.client import RequestFactory
 from django.test.utils import override_settings
+from django.urls.base import get_urlconf, set_urlconf
+from django_dynamic_fixture import get
 
-from readthedocs.core.middleware import SubdomainMiddleware
+from readthedocs.core.middleware import ReadTheDocsSessionMiddleware
+from readthedocs.projects.models import Domain, Project, ProjectRelationship
+from readthedocs.rtd_tests.utils import create_user
 
 
-class MiddlewareTests(TestCase):
+class TestCORSMiddleware(TestCase):
 
     def setUp(self):
         self.factory = RequestFactory()
-        self.middleware = SubdomainMiddleware()
-        self.url = '/'
+        self.middleware = CorsMiddleware()
+        self.url = '/api/v2/search'
+        self.owner = create_user(username='owner', password='test')
+        self.project = get(
+            Project, slug='pip',
+            users=[self.owner], privacy_level='public',
+            main_language_project=None,
+        )
+        self.subproject = get(
+            Project,
+            users=[self.owner],
+            privacy_level='public',
+            main_language_project=None,
+        )
+        self.relationship = get(
+            ProjectRelationship,
+            parent=self.project,
+            child=self.subproject,
+        )
+        self.domain = get(Domain, domain='my.valid.domain', project=self.project)
 
-    def test_failey_cname(self):
-        request = self.factory.get(self.url, HTTP_HOST='my.host.com')
-        with self.assertRaises(Http404):
-            self.middleware.process_request(request)
-        self.assertEqual(request.cname, True)
+    def test_proper_domain(self):
+        request = self.factory.get(
+            self.url,
+            {'project': self.project.slug},
+            HTTP_ORIGIN='http://my.valid.domain',
+        )
+        resp = self.middleware.process_response(request, {})
+        self.assertIn('Access-Control-Allow-Origin', resp)
 
-    @override_settings(PRODUCTION_DOMAIN='readthedocs.org')
-    def test_proper_subdomain(self):
-        request = self.factory.get(self.url, HTTP_HOST='pip.readthedocs.org')
+    def test_invalid_domain(self):
+        request = self.factory.get(
+            self.url,
+            {'project': self.project.slug},
+            HTTP_ORIGIN='http://invalid.domain',
+        )
+        resp = self.middleware.process_response(request, {})
+        self.assertNotIn('Access-Control-Allow-Origin', resp)
+
+    def test_valid_subproject(self):
+        self.assertTrue(
+            Project.objects.filter(
+                pk=self.project.pk,
+                subprojects__child=self.subproject,
+            ).exists(),
+        )
+        request = self.factory.get(
+            self.url,
+            {'project': self.subproject.slug},
+            HTTP_ORIGIN='http://my.valid.domain',
+        )
+        resp = self.middleware.process_response(request, {})
+        self.assertIn('Access-Control-Allow-Origin', resp)
+
+    def test_apiv2_endpoint_allowed(self):
+        request = self.factory.get(
+            '/api/v2/version/',
+            {'project__slug': self.project.slug, 'active': True},
+            HTTP_ORIGIN='http://my.valid.domain',
+        )
+        resp = self.middleware.process_response(request, {})
+        self.assertIn('Access-Control-Allow-Origin', resp)
+
+    def test_apiv2_endpoint_not_allowed(self):
+        request = self.factory.get(
+            '/api/v2/version/',
+            {'project__slug': self.project.slug, 'active': True},
+            HTTP_ORIGIN='http://invalid.domain',
+        )
+        resp = self.middleware.process_response(request, {})
+        self.assertNotIn('Access-Control-Allow-Origin', resp)
+
+        # POST is not allowed
+        request = self.factory.post(
+            '/api/v2/version/',
+            {'project__slug': self.project.slug, 'active': True},
+            HTTP_ORIGIN='http://my.valid.domain',
+        )
+        resp = self.middleware.process_response(request, {})
+        self.assertNotIn('Access-Control-Allow-Origin', resp)
+
+
+class TestSessionMiddleware(TestCase):
+
+    def setUp(self):
+        self.factory = RequestFactory()
+        self.middleware = ReadTheDocsSessionMiddleware()
+
+        self.user = create_user(username='owner', password='test')
+
+    def test_fallback_cookie(self):
+        request = self.factory.get('/')
+        response = HttpResponse()
         self.middleware.process_request(request)
-        self.assertEqual(request.urlconf, 'core.subdomain_urls')
-        self.assertEqual(request.subdomain, True)
-        self.assertEqual(request.slug, 'pip')
+        request.session['test'] = 'value'
+        response = self.middleware.process_response(request, response)
 
-    def test_proper_cname(self):
-        cache.get = lambda x: 'my_slug'
-        request = self.factory.get(self.url, HTTP_HOST='my.valid.homename')
+        self.assertTrue(settings.SESSION_COOKIE_NAME in response.cookies)
+        self.assertTrue(self.middleware.cookie_name_fallback in response.cookies)
+
+    def test_main_cookie_samesite_none(self):
+        request = self.factory.get('/')
+        response = HttpResponse()
         self.middleware.process_request(request)
-        self.assertEqual(request.urlconf, 'core.subdomain_urls')
-        self.assertEqual(request.cname, True)
-        self.assertEqual(request.slug, 'my_slug')
+        request.session['test'] = 'value'
+        response = self.middleware.process_response(request, response)
 
-    def test_request_header(self):
-        request = self.factory.get(self.url, HTTP_HOST='some.random.com', HTTP_X_RTD_SLUG='pip')
-        self.middleware.process_request(request)
-        self.assertEqual(request.urlconf, 'core.subdomain_urls')
-        self.assertEqual(request.cname, True)
-        self.assertEqual(request.rtdheader, True)
-        self.assertEqual(request.slug, 'pip')
-
-    @override_settings(PRODUCTION_DOMAIN='readthedocs.org')
-    def test_proper_cname_uppercase(self):
-        cache.get = lambda x: x.split('.')[0]
-        request = self.factory.get(self.url, HTTP_HOST='PIP.RANDOM.COM')
-        self.middleware.process_request(request)
-        self.assertEqual(request.urlconf, 'core.subdomain_urls')
-        self.assertEqual(request.cname, True)
-        self.assertEqual(request.slug, 'pip')
-
-    def test_request_header_uppercase(self):
-        request = self.factory.get(self.url, HTTP_HOST='some.random.com', HTTP_X_RTD_SLUG='PIP')
-        self.middleware.process_request(request)
-        self.assertEqual(request.urlconf, 'core.subdomain_urls')
-        self.assertEqual(request.cname, True)
-        self.assertEqual(request.rtdheader, True)
-        self.assertEqual(request.slug, 'pip')
-
-    @override_settings(DEBUG=True)
-    def test_debug_on(self):
-        request = self.factory.get(self.url, HTTP_HOST='doesnt.really.matter')
-        ret_val = self.middleware.process_request(request)
-        self.assertEqual(ret_val, None)
+        self.assertEqual(response.cookies[settings.SESSION_COOKIE_NAME]['samesite'], 'None')
+        self.assertEqual(response.cookies[self.middleware.cookie_name_fallback]['samesite'], '')

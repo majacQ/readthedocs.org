@@ -1,75 +1,117 @@
-## Upgraded packages
-pip==7.1.0
-virtualenv==13.1.0
-docutils==0.11
-Sphinx==1.3.1
-Pygments==2.0.2
-mkdocs==0.14.0
+# Base packages
 
-django==1.8.3
+pip==21.0.1
+virtualenv==20.4.2
 
-git+https://github.com/django-tastypie/django-tastypie.git@1e1aff3dd4dcd21669e9c68bd7681253b286b856#egg=django-tastypie
-django-haystack==2.1.0
-celery-haystack==0.7.2
-django-guardian==1.3.0
-django-extensions==1.3.8
-djangorestframework==3.0.4
-django-vanilla-views==1.0.4
-pytest-django==2.8.0
+django==2.2.19  # pyup: <2.3
+django-extensions==3.1.1
+django_polymorphic==3.0.0
+django-autoslug==1.9.8
 
-requests==2.3.0
-slumber==0.6.0
-lxml==3.3.5
+djangorestframework==3.12.2
+
+# For intersphinx during builds
+Sphinx==3.5.2
+
+# Filtering for the REST API
+django-filter==2.4.0
+
+drf-flex-fields==0.8.9
+drf-extensions==0.7.0
+
+django-vanilla-views==2.0.0
+jsonfield==3.1.0
+
+requests==2.25.1
+requests-toolbelt==0.9.1
+slumber==0.7.1
+pyyaml==5.4.1
+Pygments==2.8.1
 
 # Basic tools
-redis==2.7.1
-hiredis==0.1.2
-celery==3.1.18
-django-celery==3.1.16
-django-allauth==0.21.0
-dnspython==1.11.0
+redis==3.5.3
+kombu==5.0.2
+celery==5.0.5
 
-# VCS
-bzr==2.6
-launchpadlib==1.10.2
-mercurial==2.6.3
-httplib2==0.7.7
+# When upgrading to 0.43.0 we should double check the ``base.html`` change
+# described in the changelog. In previous versions, the allauth app included a
+# ``base.html`` template. This template could conflict with an equally named
+# template at project level. Therefore, ``base.html`` has now been moved to
+# ``account/base.html`` -- you will need to check your templates and likely
+# override ``account/base.html`` within your project.
+django-allauth==0.42.0  # pyup: ignore
+
+GitPython==3.1.14
 
 # Search
-elasticsearch==1.5.0
-pyelasticsearch==0.7.1
-pyquery==1.2.2
+elasticsearch==7.11.0  # pyup: <8.0.0
+elasticsearch-dsl==7.3.0  # pyup: <8.0
+django-elasticsearch-dsl==7.1.4  # pyup: <8.0
+selectolax==0.2.10
+
+# embed
+pyquery==1.4.3
+
+# NOTE: this dep can be removed in python 3.7 in favor of ``date.fromisoformat``
+python-dateutil==2.8.1
+
+# Ignoring orjson for now because it makes Travis to fail
+orjson==2.0.7  # pyup: ignore
 
 # Utils
-django-gravatar2==1.0.6
-doc2dash==1.1.0
-pytz==2013b
-beautifulsoup4==4.1.3
-Unipath==0.2.1
+django-gravatar2==1.4.4
+pytz==2021.1
+Unipath==1.1
 django-kombu==0.9.4
-django-secure==0.1.2
-mimeparse==0.1.3
-mock==1.0.1
-simplejson==2.3.0
-stripe==1.20.2
-django-copyright==1.0.0
-django-formtools==1.0
-django-dynamic-fixture==1.8.5
-docker-py==1.3.1
+stripe==2.56.0
+regex==2020.11.13
 
-# Docs
-sphinx-http-domain==0.2
-recommonmark==0.1.1
+# unicode-slugify==0.1.5 is not released on PyPI yet
+git+https://github.com/mozilla/unicode-slugify@b696c37#egg=unicode-slugify==0.1.5
+
+django-formtools==2.2
+django-crispy-forms==1.11.1
+
+docker==4.4.4
+
+django-textclassifier==1.0
+# django-textclassifier doesn't have pinned versions
+# if there is an update they could break our code
+nltk==3.5
+textblob==0.15.3
+
+django-annoying==0.10.6
+django-messages-extends==0.6.2
+djangorestframework-jsonp==1.0.2
+django-taggit==1.3.0
+dj-pagination==2.5.0
 
 # Version comparison stuff
-Distutils2==1.0a3
-packaging==15.2
+packaging==20.9
 
-# Commenting stuff
-django-cors-headers==0.13
-nilsimsa==0.3.7
+# django-cors-middleware==1.5.0 fails with
+# AttributeError: 'dict' object has no attribute 'has_header'
+django-cors-middleware==1.4.0  # pyup: ignore
 
-# Pegged git requirements
-git+https://github.com/alex/django-filter.git#egg=django-filter
-git+https://github.com/ericflo/django-pagination.git@e5f669036c#egg=django_pagination-dev
-git+https://github.com/alex/django-taggit.git#egg=django_taggit-dev
+# User agent parsing - used for analytics purposes
+user-agents==2.2.0
+
+
+# Utilities used to upload build media to cloud storage
+# django-storages is pinned to this particular commit because it
+# supports generating URLs with other method than GET when using
+# private buckets.
+#
+# Besides, support for the corresponding AWS_BUCKET_ACL and
+# AWS_AUTO_CREATE_BUCKET settings have been removed in 1.10. We depend on this
+# in our Docker setup. We can upgrade it but we need to add a
+# `create_buckets.sh` to be called on `--init` as we used to do for Azurite
+# https://github.com/jschneier/django-storages/pull/636
+git+https://github.com/jschneier/django-storages@d0f027c98a877f75615cfc42b4d51c038fa41bf6#egg=django-storages[boto3]==1.9.1
+
+
+# Required only in development and linting
+django-debug-toolbar==3.2
+
+# For enabling content-security-policy
+django-csp==3.7

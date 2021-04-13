@@ -1,16 +1,18 @@
-from django.conf.urls import patterns, url
+"""URL configuration for builds app."""
 
-from .views import BuildList, BuildDetail
+from django.conf.urls import url
+from django.views.generic.base import RedirectView
 
 
-urlpatterns = patterns(
-    # base view, flake8 complains if it is on the previous line.
-    'readthedocs.builds.views',
-    url(r'^(?P<project_slug>[-\w]+)/(?P<pk>\d+)/$',
-        'builds_redirect_detail',
-        name='old_builds_detail'),
-
-    url(r'^(?P<project_slug>[-\w]+)/$',
-        'builds_redirect_list',
-        name='old_builds_project_list'),
-)
+urlpatterns = [
+    url(
+        r'^(?P<project_slug>[-\w]+)/(?P<build_pk>\d+)/$',
+        RedirectView.as_view(pattern_name='builds_detail', permanent=True),
+        name='old_builds_detail',
+    ),
+    url(
+        r'^(?P<project_slug>[-\w]+)/$',
+        RedirectView.as_view(pattern_name='builds_project_list', permanent=True),
+        name='old_builds_project_list',
+    ),
+]
