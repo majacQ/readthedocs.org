@@ -7,13 +7,16 @@
     "build": "gulp build",
     "dev": "gulp dev",
     "lint": "gulp lint",
-    "vendor": "gulp vendor"
+    "vendor": "gulp vendor",
+    "prepublish": "npm run snyk-protect",
+    "snyk-protect": "snyk-protect"
   },
   "dependencies": {
     "bowser": "^1.9.3",
     "cssfilter": "0.0.8",
     "github-changelog": "git+https://github.com/agjohnson/github-changelog.git",
-    "npm": "^6.14.13"
+    "npm": "^6.14.13",
+    "@snyk/protect": "latest"
   },
   "devDependencies": {
     "bower": "^1.8.4",
@@ -45,5 +48,6 @@
   "keywords": [
     "docs",
     "documentation"
-  ]
+  ],
+  "snyk": true
 }
