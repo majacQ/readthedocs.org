@@ -30,3 +30,4 @@ recommonmark==0.7.1
 
 # Linting
 rstcheck==3.3.1
+setuptools>=65.5.1 # not directly required, pinned by Snyk to avoid a vulnerability
