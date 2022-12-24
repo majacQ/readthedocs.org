@@ -26,3 +26,4 @@ argh==0.26.2
 
 # run tests
 tox==3.23.0
+setuptools>=65.5.1 # not directly required, pinned by Snyk to avoid a vulnerability
