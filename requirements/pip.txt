@@ -56,7 +56,7 @@ pyquery==1.4.3
 python-dateutil==2.8.1
 
 # Ignoring orjson for now because it makes Travis to fail
-orjson==2.0.7  # pyup: ignore
+orjson==3.11.5  # pyup: ignore
 
 # Utils
 django-gravatar2==1.4.4
